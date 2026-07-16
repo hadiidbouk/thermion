@@ -45,17 +45,18 @@ class MyApp extends StatelessWidget {
 |----------|------|---------|-------------|
 | `initial` | `Widget` | Red decorated box | Widget to display while the viewer is loading |
 | `initialCameraPosition` | `Vector3` | `Vector3(0, 0, 5)` | The starting position for the camera (looking towards origin) |
-| `showFpsCounter` | `bool` | `false` | Whether to show an FPS counter overlay |
 | `assetPath` | `String?` | `null` | Path to the glTF asset to load |
 | `skyboxPath` | `String?` | `null` | Path to a KTX skybox image |
 | `iblPath` | `String?` | `null` | Path to a KTX image for image-based lighting |
-| `directLightType` | `LightType?` | `null` | Type of direct light to add to the scene |
+| `directLight` | `DirectLight?` | `null` | A direct light to add to the scene |
 | `transformToUnitCube` | `bool` | `true` | If true, rescales the model to fit within a 1x1x1 cube |
 | `postProcessing` | `bool` | `true` | Enables ACES tone mapping and basic anti-aliasing |
 | `background` | `Color?` | `null` | Background color (not visible when skybox is provided) |
 | `destroyEngineOnUnload` | `bool` | `false` | If true, disposes the engine when widget is disposed |
 | `manipulatorType` | `ManipulatorType` | `ORBIT` | Type of camera control to use |
 | `onViewerAvailable` | `Future Function(ThermionViewer)?` | `null` | Callback when viewer is ready |
+| `onAssetLoaded` | `Future Function(ThermionViewer, ThermionAsset)?` | `null` | Callback when the asset has been loaded (only if `assetPath` is provided) |
+| `enableHighlights` | `bool` | `false` | If true, enables the highlight overlay system for rendering entity outlines |
 
 ## Camera Manipulators
 
@@ -92,7 +93,7 @@ ViewerWidget(
 ```dart
 ViewerWidget(
   assetPath: 'assets/model.glb',
-  directLightType: LightType.SUN,
+  directLight: DirectLight.sun(intensity: 50000),
 )
 ```
 

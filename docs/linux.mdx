@@ -1,10 +1,9 @@
 ## Linux support
 
-Currently, only the Dart package (`thermion_dart`) will work on Linux (primarily for the automated build/testing pipeline). 
+Both the Dart package (`thermion_dart`) and the Flutter package (`thermion_flutter`) now work on Linux.
+
+`thermion_flutter` provides an EGL/GTK-based platform texture, so you can embed a Filament rendering surface inside a Flutter app on Linux. It links against GTK 3 (`pkg-config gtk+-3.0`), which must be available on your system.
 
 Filament has been built for Ubuntu 22.04; other distributions may work, but YMMV.
 
-The Flutter package (`thermion_flutter`) won't work; it's missing the platform glue code necessary to set up the render target.  Support will eventually be added, but there is currently no estimated timeline.
-
-Contributions are welcome and it's actually not a lot of work. Join the Discord if you want to help out.
-
+Contributions are welcome. Join the Discord if you want to help out.

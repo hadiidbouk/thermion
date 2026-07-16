@@ -8,12 +8,15 @@
       [
         ["Overview", "/"],
         ["Getting Started", "/getting_started"],
-        ["Quick Start", "/quickstart"],
-        ["Viewer", "/viewer"],
-        ["Camera Manipulation", "/camera_manipulation"]
+        ["Quick Start", "/quickstart"]
       ]
     ],
     ["Misc.", [
+      ["Viewer", "/viewer"],
+      ["Camera Manipulation", "/camera_manipulation"],
+      ["Animations", "/animations"],
+      ["Materials & Textures", "/materials"],
+      ["Filament API", "/filament_api"],
       ["Debugging", "/debugging"],
       ["Playground", "https://dartpad.thermion.dev"],
       ["Showcase", "/showcase"],
@@ -26,5 +29,5 @@
       ["Discord", "https://discord.gg/h2VdDK3EAQ"]
       ]]
   ]
-  
+
 }
