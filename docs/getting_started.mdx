@@ -1,13 +1,30 @@
 ## Getting Started
 
-Thermion currently requires the Flutter `beta` channel with the `native-assets` experiment enabled.
+Thermion currently requires the Flutter `master` channel with native assets enabled.
+
+## Prerequisites
+
+Thermion compiles native C/C++ (Filament + the Thermion plugin) via a Dart build hook, so you need a C/C++ toolchain on your machine. The prebuilt Filament binaries are downloaded automatically on first build.
+
+| Platform | Requirements |
+|----------|--------------|
+| **macOS** | Xcode 15+ (provides Clang, CMake, Metal SDK). Minimum deployment target macOS 13.0. |
+| **iOS** | Xcode 15+. Minimum deployment target iOS 13.0. |
+| **Android** | Android SDK, minSdk 22. NDK is fetched automatically by the Flutter build. |
+| **Windows** | Visual Studio 2022 with the *Desktop development with C++* workload (includes CMake + Windows SDK). Windows 10+. |
+| **Linux** | GCC/Clang, CMake 3.14+, and GTK 3 dev headers (`pkg-config gtk+-3.0`). |
+| **Web** | Emscripten, CMake, and GNU Make. See [Web](./web) — you must compile Thermion to WASM first (`make wasm`). |
+
+You'll also want [GNU Make](https://www.gnu.org/software/make/) installed regardless of platform (used by the `make` targets for materials, bindings, and WASM).
+
+## Setup
 
 1. Switch to Flutter master channel, upgrade Flutter, create a new project, then add `thermion_flutter` as a dependency
 
 ```bash
-$ flutter channel beta
+$ flutter channel master
 $ flutter upgrade
-$ flutter config --enable-native-assets  
+$ flutter config --enable-native-assets
 $ cd your_flutter_project
 $ flutter pub add thermion_flutter
 ```
@@ -38,3 +55,19 @@ and change the minimum deployment target to 13.0:
 ![XCode screenshot](images/macos_min_deployment.png)
 
 </Accordion>
+
+3. Run the project
+
+```bash
+$ flutter run -d macos   # or windows, chrome, ios, <device-id>
+```
+
+> The first build downloads the prebuilt Filament binaries from Cloudflare, which can take a while (especially on Windows). They're cached under `.dart_tool/`, so subsequent builds are much faster — `flutter clean` forces a re-download.
+
+## Next steps
+
+- For the simplest path to a single 3D model, see [Quick Start](./quickstart).
+- For fine-grained control over the viewer, see [Viewer](./viewer).
+- For camera controls, see [Camera Manipulation](./camera_manipulation).
+- For glTF/morph/bone animation, see [Animations](./animations).
+- For materials and textures, see [Materials & Textures](./materials).
