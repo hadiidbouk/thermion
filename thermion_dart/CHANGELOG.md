@@ -5,6 +5,9 @@ Fixes:
  - add BLIT_SRC|BLIT_DST when decodeToTexture asks mipmaps.
  - free stb buffer after LinearImage decode.
  - add Engine_destroyRenderer + RenderThread variant.
+Changes:
+ - bump Filament to v1.74.0 (build scripts now patch the libassimp `tnt` overlay to
+   enable STL/PLY import + glTF2/FBX export).
 
 ## 0.4.1
 - re-publish without Melos
