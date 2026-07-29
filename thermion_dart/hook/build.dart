@@ -150,6 +150,18 @@ outputDirectory : ${outputDirectory.path}
 
     logger.info("Sources : $sources");
 
+    // Assimp-backed model loading (OBJ/FBX/STL/PLY/...) is opt-in: the prebuilt
+    // libassimp.a is always produced by the platform build scripts, but it is
+    // only linked into a downstream app when enabled here. Enable via:
+    //   hooks:
+    //     user_defines:
+    //       thermion_dart:
+    //         assimp: true
+    final assimpEnabled = input.userDefines["assimp"] == true ||
+        input.userDefines["assimp"] == "true" ||
+        input.userDefines["assimp"] == 1 ||
+        input.userDefines["assimp"] == "1";
+
     var libs = [
       "filament",
       "backend",
@@ -175,6 +187,7 @@ outputDirectory : ${outputDirectory.path}
       "basis_transcoder",
       "uberarchive",
       if (!{OS.linux, OS.android}.contains(targetOS)) "zstd",
+      if (assimpEnabled) "assimp",
       //"mikktspace",
       "geometry",
       if (targetOS == OS.macOS && buildMode == BuildMode.debug) ...[
@@ -198,6 +211,12 @@ outputDirectory : ${outputDirectory.path}
       defines["ENABLE_TRACING"] = "1";
     }
 
+    // Assimp model loading compile-time flag (see assimpEnabled above).
+    if (assimpEnabled) {
+      logger.info("Enabling Assimp model loading");
+      defines["THERMION_ASSIMP"] = "1";
+    }
+
     // Check for plugin configuration
     final pluginConfigs = input.userDefines["plugins"] as List<dynamic>?;
 
@@ -214,7 +233,12 @@ outputDirectory : ${outputDirectory.path}
           ? 'native/include/filament/debug'
           : 'native/include/filament/release',
     ];
-    final includeDirs = <String>['native/include', ...filamentIncludeDir];
+    final includeDirs = <String>[
+      'native/include',
+      ...filamentIncludeDir,
+      if (assimpEnabled)
+        'native/include/filament/third_party/libassimp/include',
+    ];
 
     // Process plugins after flags and includeDirs are declared
     if (pluginConfigs != null && consumingPackageRoot != null) {
