@@ -133,6 +133,21 @@ class ThermionFlutterPluginImpl extends ThermionFlutterPlugin {
   }
 
   @override
+  Future<PlatformTextureDescriptor?> createContextBootstrap() async {
+    if (!Platform.isLinux ||
+        _resolveBackend() != Backend.OPENGL ||
+        FilamentApp.instance != null) {
+      return null;
+    }
+    return _textureSurfaces.createContextBootstrap();
+  }
+
+  @override
+  Future<void> destroyContextBootstrap(PlatformTextureDescriptor descriptor) {
+    return _textureSurfaces.destroyContextBootstrap(descriptor);
+  }
+
+  @override
   Future<PlatformTextureDescriptor?> createTextureAndBindToView(
     View view,
     int width,
