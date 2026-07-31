@@ -2,8 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../../thermion_flutter_plugin.dart';
 import 'platform_texture_descriptor.dart';
+
+typedef ContextBootstrapAllocator =
+    Future<PlatformTextureDescriptor?> Function();
+typedef ContextBootstrapDestroyer =
+    Future<void> Function(PlatformTextureDescriptor descriptor);
 
 /// Hosts the Flutter-side prerequisites for initializing the native plugin,
 /// then runs [initialize].
@@ -17,10 +21,14 @@ class ThermionFlutterPluginInitializer extends StatefulWidget {
     super.key,
     required this.initialize,
     required this.child,
+    this.createContextBootstrap,
+    this.destroyContextBootstrap,
   });
 
   final Future<void> Function() initialize;
   final Widget child;
+  final ContextBootstrapAllocator? createContextBootstrap;
+  final ContextBootstrapDestroyer? destroyContextBootstrap;
 
   @override
   State<ThermionFlutterPluginInitializer> createState() =>
@@ -54,8 +62,7 @@ class _ThermionFlutterPluginInitializerState
   }
 
   Future<void> _bootstrap() async {
-    final plugin = ThermionFlutterPlugin.instance;
-    final descriptor = await plugin.createContextBootstrap();
+    final descriptor = await widget.createContextBootstrap?.call();
     _descriptor = descriptor;
 
     try {
@@ -93,8 +100,9 @@ class _ThermionFlutterPluginInitializerState
   }
 
   Future<void> _destroy(PlatformTextureDescriptor descriptor) {
-    return _destroyFuture ??= ThermionFlutterPlugin.instance
-        .destroyContextBootstrap(descriptor);
+    return _destroyFuture ??=
+        widget.destroyContextBootstrap?.call(descriptor) ??
+        descriptor.destroy();
   }
 
   @override

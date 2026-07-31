@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' hide View;
 import 'package:thermion_dart/thermion_dart.dart';
 import 'package:thermion_flutter/src/options.dart';
 import 'package:thermion_flutter/src/platform/src/platform_texture_descriptor.dart';
+import 'package:thermion_flutter/src/platform/src/thermion_flutter_plugin_initializer.dart';
 import 'platform/platform.dart';
 import 'package:logging/logging.dart';
 
@@ -34,18 +37,16 @@ abstract class ThermionFlutterPlugin {
   /// Initialize the plugin and create the default swapchain.
   Future<SwapChain?> initialize({bool destroySwapchain = true});
 
-  /// Creates the internal Flutter texture used to import the raster thread's
-  /// rendering context before native engine initialization.
-  ///
-  /// The internal context-bootstrap widget owns the returned descriptor and
-  /// its required Flutter texture layer. Viewer and application widgets
-  /// should not call this directly. Other platforms, and an already
-  /// initialized engine, return null.
-  Future<PlatformTextureDescriptor?> createContextBootstrap() async => null;
-
-  /// Releases an internal descriptor returned by [createContextBootstrap].
-  Future<void> destroyContextBootstrap(PlatformTextureDescriptor descriptor) {
-    return descriptor.destroy();
+  /// Hosts any Flutter-side prerequisites while [initialize] creates a viewer.
+  @internal
+  Widget buildInitializationScope({
+    required Future<void> Function() initialize,
+    required Widget child,
+  }) {
+    return ThermionFlutterPluginInitializer(
+      initialize: initialize,
+      child: child,
+    );
   }
 
   /// Creates a rendering surface and binds to the given [View].

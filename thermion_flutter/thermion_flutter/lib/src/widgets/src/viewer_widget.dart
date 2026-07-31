@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:thermion_flutter/thermion_flutter.dart' hide Texture;
-import 'package:thermion_flutter/src/platform/src/thermion_flutter_plugin_initializer.dart';
 
 enum ManipulatorType { NONE, ORBIT, FREE_FLIGHT }
 
@@ -408,7 +407,7 @@ class _ViewerWidgetState extends State<ViewerWidget> {
     final child = viewport == null
         ? widget.initial
         : SizedBox.expand(child: viewport);
-    return ThermionFlutterPluginInitializer(
+    return ThermionFlutterPlugin.instance.buildInitializationScope(
       initialize: _initializeViewer,
       child: child,
     );
