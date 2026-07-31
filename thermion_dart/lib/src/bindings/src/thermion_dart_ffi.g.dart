@@ -1865,7 +1865,7 @@ external void FrameScheduler_start(
   int targetFps,
 );
 
-@ffi.Native<ffi.Void Function()>(isLeaf: true)
+@ffi.Native<ffi.Void Function()>()
 external void FrameScheduler_stop();
 
 @ffi.Native<ffi.Void Function(ffi.Pointer<ffi.Void>)>(isLeaf: true)
