@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import 'package:thermion_flutter/thermion_flutter.dart' hide Texture;
-import 'package:thermion_flutter/src/platform/src/platform_texture_descriptor.dart';
+import 'package:thermion_flutter/src/platform/src/thermion_flutter_plugin_initializer.dart';
 
 enum ManipulatorType { NONE, ORBIT, FREE_FLIGHT }
 
@@ -84,7 +84,6 @@ class ViewerWidget extends StatefulWidget {
 
 class _ViewerWidgetState extends State<ViewerWidget> {
   ThermionViewer? viewer;
-  PlatformTextureDescriptor? _contextBootstrap;
   Future<void>? _initialization;
   Future<void>? _tearDownFuture;
   Future<void>? _inputHandlerUpdate;
@@ -92,16 +91,7 @@ class _ViewerWidgetState extends State<ViewerWidget> {
 
   late final _logger = Logger(runtimeType.toString());
 
-  @override
-  void initState() {
-    super.initState();
-    _initialization = _createViewer();
-    unawaited(
-      _initialization!.catchError((Object error, StackTrace stack) {
-        _reportAsyncError('initialization', error, stack);
-      }),
-    );
-  }
+  Future<void> _initializeViewer() => _initialization ??= _createViewer();
 
   Future<void> _createViewer() async {
     // Override options if this widget needs highlights
@@ -125,46 +115,15 @@ class _ViewerWidgetState extends State<ViewerWidget> {
       );
     }
 
-    final plugin = ThermionFlutterPlugin.instance;
-    final contextBootstrap = await plugin.createContextBootstrap();
-    _contextBootstrap = contextBootstrap;
-    try {
-      if (contextBootstrap != null) {
-        if (_disposing) return;
-        if (mounted) {
-          setState(() {});
-        }
-        try {
-          contextBootstrap.hardwareId = await contextBootstrap
-              .awaitTextureReady();
-        } catch (_) {
-          // Destroying a bootstrap texture is how dispose() cancels a pending
-          // populate handshake. Treat that cancellation as normal teardown.
-          if (_disposing) return;
-          rethrow;
-        }
-      }
-
-      if (_disposing) return;
-      final viewer = await ThermionFlutterPlugin.createViewer();
-      this.viewer = viewer;
-      if (_disposing) {
-        return;
-      }
-      await _configure();
-    } finally {
-      if (identical(_contextBootstrap, contextBootstrap)) {
-        _contextBootstrap = null;
-      }
-      if (mounted && !_disposing) {
-        // Remove the bootstrap Texture layer before unregistering its native
-        // texture. On success this frame also publishes the real viewport.
-        setState(() {});
-        await WidgetsBinding.instance.endOfFrame;
-      }
-      if (contextBootstrap != null) {
-        await plugin.destroyContextBootstrap(contextBootstrap);
-      }
+    if (_disposing) return;
+    final viewer = await ThermionFlutterPlugin.createViewer();
+    this.viewer = viewer;
+    if (_disposing) {
+      return;
+    }
+    await _configure();
+    if (mounted && !_disposing) {
+      setState(() {});
     }
   }
 
@@ -434,23 +393,6 @@ class _ViewerWidgetState extends State<ViewerWidget> {
   @override
   void dispose() {
     _disposing = true;
-    final contextBootstrap = _contextBootstrap;
-    if (contextBootstrap != null) {
-      // Unregistering resolves a pending awaitTextureReady call with an error,
-      // allowing _initialization and teardown to finish if the widget is
-      // removed before Flutter has populated the texture.
-      unawaited(
-        ThermionFlutterPlugin.instance
-            .destroyContextBootstrap(contextBootstrap)
-            .catchError((Object error, StackTrace stack) {
-              _reportAsyncError(
-                'cancelling context initialization',
-                error,
-                stack,
-              );
-            }),
-      );
-    }
     _focusNode.dispose();
     _tearDownFuture ??= _performTearDown();
     unawaited(
@@ -463,34 +405,12 @@ class _ViewerWidgetState extends State<ViewerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (viewport != null) {
-      return SizedBox.expand(child: viewport);
-    }
-
-    final contextBootstrap = _contextBootstrap;
-    if (contextBootstrap == null) {
-      return widget.initial;
-    }
-
-    // A real Texture layer is required for Flutter to invoke populate() on its
-    // raster thread. The 1x1 transparent bootstrap remains visually inert
-    // while widget.initial keeps its normal loading appearance.
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        widget.initial,
-        Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox.square(
-            dimension: 1,
-            child: Texture(
-              textureId: contextBootstrap.flutterTextureId,
-              filterQuality: FilterQuality.none,
-              freeze: false,
-            ),
-          ),
-        ),
-      ],
+    final child = viewport == null
+        ? widget.initial
+        : SizedBox.expand(child: viewport);
+    return ThermionFlutterPluginInitializer(
+      initialize: _initializeViewer,
+      child: child,
     );
   }
 }

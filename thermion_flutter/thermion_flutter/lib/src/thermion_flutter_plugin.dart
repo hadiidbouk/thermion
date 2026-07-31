@@ -34,17 +34,16 @@ abstract class ThermionFlutterPlugin {
   /// Initialize the plugin and create the default swapchain.
   Future<SwapChain?> initialize({bool destroySwapchain = true});
 
-  /// Creates the Flutter texture used to import the raster thread's rendering
-  /// context before native engine initialization.
+  /// Creates the internal Flutter texture used to import the raster thread's
+  /// rendering context before native engine initialization.
   ///
-  /// Linux OpenGL callers must place the returned descriptor's
-  /// [PlatformTextureDescriptor.flutterTextureId] in a Flutter [Texture]
-  /// widget and await [PlatformTextureDescriptor.awaitTextureReady] before
-  /// calling [createViewer]. Other platforms, and an already initialized
-  /// engine, return null.
+  /// The internal context-bootstrap widget owns the returned descriptor and
+  /// its required Flutter texture layer. Viewer and application widgets
+  /// should not call this directly. Other platforms, and an already
+  /// initialized engine, return null.
   Future<PlatformTextureDescriptor?> createContextBootstrap() async => null;
 
-  /// Releases a descriptor returned by [createContextBootstrap].
+  /// Releases an internal descriptor returned by [createContextBootstrap].
   Future<void> destroyContextBootstrap(PlatformTextureDescriptor descriptor) {
     return descriptor.destroy();
   }
