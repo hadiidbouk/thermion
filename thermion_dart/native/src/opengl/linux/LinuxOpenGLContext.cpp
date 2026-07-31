@@ -414,6 +414,17 @@ public:
             if (_textureTransport == TextureTransport::EGL_IMAGE) {
                 texture = LinuxOpenGLTexture::createEglImage(
                     _display, _context, _producerSurface, width, height);
+                if (!texture) {
+                    std::cerr
+                        << "[ThermionGL:Context] EGLImage allocation failed for "
+                        << width << "x" << height
+                        << "; retrying with DMA-BUF" << std::endl;
+                    if (EnsureGbmDevice()) {
+                        texture = LinuxOpenGLTexture::createDmaBuf(
+                            _display, _context, _producerSurface, _gbmDevice,
+                            width, height);
+                    }
+                }
             } else {
                 if (!EnsureGbmDevice()) {
                     return;
@@ -486,19 +497,52 @@ public:
     }
 
 private:
+    std::string ResolveDrmDevicePath() {
+        if (_display != EGL_NO_DISPLAY) {
+            auto queryDisplayAttrib =
+                reinterpret_cast<PFNEGLQUERYDISPLAYATTRIBEXTPROC>(
+                    eglGetProcAddress("eglQueryDisplayAttribEXT"));
+            auto queryDeviceString =
+                reinterpret_cast<PFNEGLQUERYDEVICESTRINGEXTPROC>(
+                    eglGetProcAddress("eglQueryDeviceStringEXT"));
+            EGLAttrib deviceAttribute = 0;
+            if (queryDisplayAttrib && queryDeviceString &&
+                queryDisplayAttrib(
+                    _display, EGL_DEVICE_EXT, &deviceAttribute)) {
+                auto device =
+                    reinterpret_cast<EGLDeviceEXT>(deviceAttribute);
+                const char* path = queryDeviceString(
+                    device, EGL_DRM_RENDER_NODE_FILE_EXT);
+                if (!path || path[0] == '\0') {
+                    path = queryDeviceString(device, EGL_DRM_DEVICE_FILE_EXT);
+                }
+                if (path && path[0] != '\0') {
+                    return path;
+                }
+            }
+        }
+
+        // Retain the historic default for non-Flutter/headless EGL stacks that
+        // do not expose EGL_EXT_device_query.
+        return "/dev/dri/renderD128";
+    }
+
     bool EnsureGbmDevice() {
         if (_gbmDevice) {
             return true;
         }
         if (_drmFd < 0) {
-            _drmFd = open("/dev/dri/renderD128", O_RDWR);
+            const std::string drmDevicePath = ResolveDrmDevicePath();
+            _drmFd = open(drmDevicePath.c_str(), O_RDWR);
             if (_drmFd < 0) {
-                _lastError = "Failed to open /dev/dri/renderD128 for DMA-BUF";
-                LOG_ERROR("Failed to open /dev/dri/renderD128");
+                _lastError =
+                    "Failed to open " + drmDevicePath + " for DMA-BUF";
+                std::cerr << "[ThermionGL:Context] " << _lastError
+                          << std::endl;
                 return false;
             }
-            std::cerr << "[ThermionGL:Context] DMA-BUF DRM fd=" << _drmFd
-                      << std::endl;
+            std::cerr << "[ThermionGL:Context] DMA-BUF device="
+                      << drmDevicePath << " fd=" << _drmFd << std::endl;
         }
 
         _gbmDevice = gbm_create_device(_drmFd);

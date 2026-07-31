@@ -137,6 +137,7 @@ class _ThermionFlutterPluginInitializerState
 
     return Stack(
       fit: StackFit.expand,
+      alignment: Alignment.topLeft,
       children: [
         widget.child,
         Align(

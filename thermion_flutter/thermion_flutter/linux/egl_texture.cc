@@ -22,17 +22,33 @@ static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC s_glEGLImageTargetTexture2DOES = null
 struct DeferredReadyResponse {
     FlMethodCall* method_call;
     int64_t texture_id;
+    ThermionTextureGL* texture;
 };
 
 static gboolean respond_texture_ready(gpointer user_data) {
     auto* response = static_cast<DeferredReadyResponse*>(user_data);
-    g_autoptr(FlValue) result = fl_value_new_int(response->texture_id);
-    fl_method_call_respond(
-        response->method_call,
-        FL_METHOD_RESPONSE(fl_method_success_response_new(result)), nullptr);
-    g_object_unref(response->method_call);
-    delete response;
+    if (response->texture->destroyed) {
+        fl_method_call_respond(
+            response->method_call,
+            FL_METHOD_RESPONSE(fl_method_error_response_new(
+                "DESTROYED",
+                "Texture destroyed before readiness response", nullptr)),
+            nullptr);
+    } else {
+        g_autoptr(FlValue) result = fl_value_new_int(response->texture_id);
+        fl_method_call_respond(
+            response->method_call,
+            FL_METHOD_RESPONSE(fl_method_success_response_new(result)),
+            nullptr);
+    }
     return G_SOURCE_REMOVE;
+}
+
+static void destroy_deferred_ready_response(gpointer user_data) {
+    auto* response = static_cast<DeferredReadyResponse*>(user_data);
+    g_object_unref(response->method_call);
+    g_object_unref(response->texture);
+    delete response;
 }
 
 static void ensure_egl_procs() {
@@ -80,13 +96,23 @@ thermion_texture_populate(FlTextureGL *texture,
 
     ThermionTextureGL *self = THERMION_TEXTURE_GL(texture);
 
+    // Capture the raster context for owner-aware cleanup as well as OpenGL
+    // initialization. This callback is the only place Flutter guarantees that
+    // context is current, regardless of Filament's selected backend.
+    EGLContext flutterContext = eglGetCurrentContext();
+    EGLDisplay flutterDisplay = eglGetCurrentDisplay();
+    if (flutterContext != EGL_NO_CONTEXT &&
+        flutterDisplay != EGL_NO_DISPLAY) {
+        thermion_flutter_render_context = flutterContext;
+        thermion_flutter_render_display = flutterDisplay;
+    }
+
     // Direct sharing path: texture is directly visible from Flutter's context.
     // If gl_texture_id == 0, this is a deferred texture — create it now on
     // Flutter's render context (which is guaranteed current during populate).
-    if (self->use_direct_sharing) {
+    if (self->transport ==
+        THERMION_TEXTURE_TRANSPORT_CONTEXT_BOOTSTRAP) {
         if (self->gl_texture_id == 0) {
-            EGLContext flutterContext = eglGetCurrentContext();
-            EGLDisplay flutterDisplay = eglGetCurrentDisplay();
             if (flutterContext == EGL_NO_CONTEXT ||
                 flutterDisplay == EGL_NO_DISPLAY) {
                 g_set_error(error, g_quark_from_static_string("thermion"), 1,
@@ -139,16 +165,21 @@ thermion_texture_populate(FlTextureGL *texture,
             // may immediately initialize another EGL client API when the
             // Future completes. Queue the response on Flutter's platform loop
             // so this raster callback has fully returned first.
-            if (self->pending_ready_call) {
+            for (guint i = 0; i < self->pending_ready_calls->len; i++) {
+                auto* methodCall = static_cast<FlMethodCall*>(
+                    g_ptr_array_index(self->pending_ready_calls, i));
                 auto* response = new DeferredReadyResponse{
-                    self->pending_ready_call,
+                    methodCall,
                     static_cast<int64_t>(self->gl_texture_id),
+                    THERMION_TEXTURE_GL(g_object_ref(self)),
                 };
-                self->pending_ready_call = nullptr;
                 g_idle_add_full(
                     G_PRIORITY_DEFAULT_IDLE, respond_texture_ready, response,
-                    nullptr);
+                    destroy_deferred_ready_response);
             }
+            // Ownership of each FlMethodCall reference moved to its idle
+            // response.
+            g_ptr_array_set_size(self->pending_ready_calls, 0);
         }
 
         *target = GL_TEXTURE_2D;
@@ -161,7 +192,10 @@ thermion_texture_populate(FlTextureGL *texture,
     // EGLImage bridge path: the source texture lives on Filament's desktop
     // context. On first populate, bind its EGLImage to a Flutter-owned texture
     // name on Flutter's current context.
-    if (self->use_egl_image) {
+    if (self->transport ==
+            THERMION_TEXTURE_TRANSPORT_PLUGIN_EGL_IMAGE ||
+        self->transport ==
+            THERMION_TEXTURE_TRANSPORT_CONTEXT_EGL_IMAGE) {
         if (!self->initialized) {
             ensure_egl_procs();
             if (!s_glEGLImageTargetTexture2DOES) {
@@ -296,46 +330,33 @@ thermion_texture_populate(FlTextureGL *texture,
 static void thermion_texture_gl_dispose(GObject* object) {
     ThermionTextureGL *self = THERMION_TEXTURE_GL(object);
 
-    // Clean up any pending deferred method call
-    if (self->pending_ready_call) {
-        fl_method_call_respond(self->pending_ready_call,
-            FL_METHOD_RESPONSE(fl_method_error_response_new(
-                "DESTROYED", "Texture destroyed before populate", nullptr)), nullptr);
-        g_object_unref(self->pending_ready_call);
-        self->pending_ready_call = nullptr;
-    }
-
-    if (self->use_direct_sharing) {
-        // Direct sharing: texture is owned by the plugin (deleted on utility context).
-        // Nothing to clean up here — just zero out.
-        self->gl_texture_id = 0;
-        G_OBJECT_CLASS(thermion_texture_gl_parent_class)->dispose(object);
-        return;
-    }
-
-    if (self->use_egl_image) {
-        // EGLImage path: clean up the Flutter-side texture (created on Flutter's context)
-        if (self->flutter_gl_texture_id != 0) {
-            glDeleteTextures(1, &self->flutter_gl_texture_id);
-            self->flutter_gl_texture_id = 0;
+    // Native GL/EGL resources are released explicitly by the plugin while
+    // their owning contexts are available. GObject disposal only resolves
+    // outstanding method calls and releases their references.
+    if (self->pending_ready_calls) {
+        for (guint i = 0; i < self->pending_ready_calls->len; i++) {
+            auto* methodCall = static_cast<FlMethodCall*>(
+                g_ptr_array_index(self->pending_ready_calls, i));
+            fl_method_call_respond(
+                methodCall,
+                FL_METHOD_RESPONSE(fl_method_error_response_new(
+                    "DESTROYED", "Texture destroyed before populate",
+                    nullptr)),
+                nullptr);
+            g_object_unref(methodCall);
         }
-        // The source texture (gl_texture_id) is cleaned up by the plugin.
-        self->gl_texture_id = 0;
-    } else {
-        if (self->gl_texture_id != 0) {
-            glDeleteTextures(1, &self->gl_texture_id);
-            self->gl_texture_id = 0;
-        }
+        g_ptr_array_set_size(self->pending_ready_calls, 0);
+        g_ptr_array_unref(self->pending_ready_calls);
+        self->pending_ready_calls = nullptr;
     }
 
-    if (self->egl_image != EGL_NO_IMAGE_KHR && s_eglDestroyImageKHR) {
-        EGLDisplay display = eglGetCurrentDisplay();
-        if (display != EGL_NO_DISPLAY) {
-            s_eglDestroyImageKHR(display, self->egl_image);
-        }
-        self->egl_image = EGL_NO_IMAGE_KHR;
+    if (self->gl_texture_id != 0 ||
+        self->flutter_gl_texture_id != 0 ||
+        self->egl_image != EGL_NO_IMAGE_KHR) {
+        std::cerr
+            << "[ThermionEGL] Texture disposed before explicit native cleanup"
+            << std::endl;
     }
-
     G_OBJECT_CLASS(thermion_texture_gl_parent_class)->dispose(object);
 }
 
@@ -358,11 +379,9 @@ void thermion_texture_gl_init(ThermionTextureGL* self) {
     self->egl_image = EGL_NO_IMAGE_KHR;
     self->initialized = FALSE;
     self->surface_id = -1;
-    self->use_egl_image = FALSE;
-    self->producer_owned_by_context = FALSE;
-    self->use_direct_sharing = FALSE;
-    self->is_context_bootstrap = FALSE;
-    self->pending_ready_call = nullptr;
+    self->transport = THERMION_TEXTURE_TRANSPORT_DMA_BUF;
+    self->pending_ready_calls = g_ptr_array_new();
+    self->destroyed = FALSE;
 }
 
 ThermionTextureGL* thermion_texture_gl_create(
@@ -398,7 +417,7 @@ ThermionTextureGL* thermion_texture_gl_create_shared(
     textureGL->egl_image = egl_image;
     textureGL->surface_id = surface_id;
     textureGL->registrar = registrar;
-    textureGL->use_egl_image = TRUE;
+    textureGL->transport = THERMION_TEXTURE_TRANSPORT_PLUGIN_EGL_IMAGE;
     // initialized = FALSE so populate() will import the EGLImage on first call
 
     return textureGL;
@@ -413,17 +432,10 @@ ThermionTextureGL* thermion_texture_gl_create_context_bootstrap(
     textureGL->width = width;
     textureGL->height = height;
     textureGL->registrar = registrar;
-    textureGL->use_direct_sharing = TRUE;
-    textureGL->is_context_bootstrap = TRUE;
+    textureGL->transport = THERMION_TEXTURE_TRANSPORT_CONTEXT_BOOTSTRAP;
     // populate() creates gl_texture_id while Flutter's raster context is
     // current and resolves the pending awaitTextureReady call.
     textureGL->gl_texture_id = 0;
 
     return textureGL;
-}
-
-void thermion_texture_gl_destroy(ThermionTextureGL* texture) {
-    if (texture && texture->registrar) {
-        fl_texture_registrar_unregister_texture(texture->registrar, FL_TEXTURE(texture));
-    }
 }
