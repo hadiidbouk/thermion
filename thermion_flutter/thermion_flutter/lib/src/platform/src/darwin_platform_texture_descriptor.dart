@@ -48,10 +48,11 @@ class DarwinPlatformTextureDescriptorImpl extends PlatformTextureDescriptor {
 
   /// The FlutterTextureRegistry exposed by the plugin
   static ThermionTextureRegistry? _registry;
+  // Unchecked cast: the real object is a FlutterTextureRegistry, so the
+  // generated `.as` constructor (which asserts isKindOfClass:) cannot be used.
   static ThermionTextureRegistry get _textureRegistry =>
-      _registry ??= ThermionTextureRegistry.castFrom(
-        SwiftThermionFlutterPluginObjCAPI.textureRegistry(),
-      );
+      _registry ??= SwiftThermionFlutterPluginObjCAPI.textureRegistry()
+          as ThermionTextureRegistry;
 
   @override
   Future<void> destroy() async {
@@ -61,7 +62,7 @@ class DarwinPlatformTextureDescriptorImpl extends PlatformTextureDescriptor {
     // Set flag early to ensure markTextureFrameAvailable is not called with a
     // destroyed texture handle.
     _destroyed = true;
-    _textureRegistry.unregisterTexture_(flutterTextureId);
+    _textureRegistry.unregisterTexture(flutterTextureId);
 
     // Drop our Dart-owned NSObject retains explicitly and deterministically
     // — do NOT rely on Dart GC finalizers to release them. `ref.release()`
@@ -91,22 +92,22 @@ class DarwinPlatformTextureDescriptorImpl extends PlatformTextureDescriptor {
         "destroyed texture descriptor.",
       );
     }
-    _textureRegistry.textureFrameAvailable_(flutterTextureId);
+    _textureRegistry.textureFrameAvailable(flutterTextureId);
   }
 
   static DarwinPlatformTextureDescriptorImpl allocate(int width, int height) {
     final metalTexture =
-        MetalTextureWrapper.allocateWithWidth_height_isDepth_isStencil_(
+        MetalTextureWrapper.allocateWithWidth(
           width,
-          height,
-          false,
-          false,
+          height: height,
+          isDepth: false,
+          isStencil: false,
         );
 
-    final adapter = FlutterMetalTextureWrapper.alloc().initWithTexture_(
+    final adapter = FlutterMetalTextureWrapper.alloc().initWithTexture(
       metalTexture,
     );
-    final flutterTextureId = _textureRegistry.registerTexture_(adapter);
+    final flutterTextureId = _textureRegistry.registerTexture(adapter);
     if (didDarwinTextureRegistrationFail(
       isIOS: Platform.isIOS,
       textureId: flutterTextureId,
