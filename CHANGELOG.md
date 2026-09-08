@@ -11,6 +11,11 @@
   instead of `void` (internally, these now correctly run on the
   main Filament thread).
 
+### Fixes
+- `ThermionAsset.setCastShadows` / `setReceiveShadows` skip entities without a
+  renderable component (bones, empties, attachment nodes) instead of logging
+  `Error: invalid renderable` for each one.
+
 ## 0.5.0-pre.5
 
 - Rework the CI release pipeline: releases are cut from `develop` via a manual
