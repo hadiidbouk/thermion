@@ -3,6 +3,9 @@
 ## 0.6.0
 
 ### Breaking changes
+- `thermion_flutter` (Android) migrates to Flutter's built-in Kotlin: the plugin
+  no longer applies the Kotlin Gradle Plugin itself. Minimum supported SDK is
+  now Flutter 3.44 / Dart 3.12.
 - `LightManager.setShadowCaster`/`setShadowOptions` and
   `RenderableManager.setCastShadows`/`setReceiveShadows` now return `Future`
   instead of `void` (internally, these now correctly run on the
