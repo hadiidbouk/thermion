@@ -1732,10 +1732,21 @@ extern "C"
       void (*callback)(bool))
   {
     auto *rt = RT(tAnimationManager);
+    // Copy the weights now: the caller's buffer (a Dart-heap Float32List) is
+    // only valid for the duration of this call, but the task runs later on the
+    // render thread — reading it then is a use-after-free once the Dart GC
+    // moves or unmaps the page.
+    const bool valid = numWeights >= 0 && (numWeights == 0 || morphData != nullptr);
+    std::vector<float> weights;
+    if (valid && numWeights > 0) {
+      weights.assign(morphData, morphData + numWeights);
+    }
     std::packaged_task<void()> lambda(
-        [=]() mutable
+        [=, weights = std::move(weights)]() mutable
         {
-          bool result = AnimationManager_setMorphTargetWeights(tAnimationManager, entityId, morphData, numWeights);
+          const bool result = valid && (weights.empty() ||
+              AnimationManager_setMorphTargetWeights(
+                  tAnimationManager, entityId, weights.data(), static_cast<int>(weights.size())));
           PROXY(callback(result));
         });
     auto fut = rt->addTask(lambda);
